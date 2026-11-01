@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>CRUSH CARS</title>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
 :root{--bg:#06080f;--panel:#0d1424;--panel2:#131d35;--line:#1f2e52;--blue:#18c8ff;--blue2:#0a7cff;--orange:#ff7a1a;--orange2:#ffb020;--text:#e8f0ff;--dim:#8191b4;--red:#ff3b5c;--green:#37e08a}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -2724,15 +2725,43 @@ const NET = { ws: null, st: 'off', url: '', pid: null, token: null, room: null, 
 const serverNow = () => Date.now() + NET.off;
 const touchDev = () => document.body.classList.contains('touch');
 
-/* ---------- dirección del servidor ---------- */
+/* ---------- dirección del servidor (Socket.io) ---------- */
+/* ▼▼▼ PON AQUÍ LA URL DE TU SERVICIO EN RENDER (la que ves en el panel, p. ej. https://crush-cars-abcd.onrender.com) ▼▼▼ */
+const MP_SERVER = 'https://TU-SERVICIO.onrender.com';
+/* ▲▲▲ ----------------------------------------------------------------------------------------------------------- ▲▲▲ */
 function netNormUrl(v) {
-  v = String(v || '').trim(); if (!v) return '';
-  if (/^https?:\/\//i.test(v)) v = v.replace(/^http/i, 'ws');
-  else if (!/^wss?:\/\//i.test(v)) v = (/^(localhost|127\.|192\.168\.|10\.|\[::1\])/.test(v) ? 'ws://' : 'wss://') + v;
-  v = v.replace(/\/+$/, ''); if (!/\/ws$/.test(v)) v += '/ws'; return v;
+  v = String(v || '').trim();
+  const pre = /^(?:(?:wss?|https?)?:)?\/+/i;
+  while (pre.test(v)) v = v.replace(pre, '');                         // quita wss:// ws:// https:// http:// y restos como "://"
+  v = v.replace(/[?#].*$/, '').replace(/\/socket\.io.*$/i, '').replace(/\/ws\/?$/i, '').replace(/\/+$/, '');
+  if (!/^[a-z0-9.\-]+(:\d+)?(\/[^\s]*)?$/i.test(v) && !/^\[::1\](:\d+)?$/.test(v)) return '';
+  return (/^(localhost|127\.|192\.168\.|10\.|\[::1\])/i.test(v) ? 'http://' : 'https://') + v;   // *.onrender.com siempre https://
 }
-function netSameOrigin() { return /^https?:$/.test(location.protocol) && location.host ? (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws' : ''; }
-const netDefaultUrl = () => mpStore.get('server', '') || netSameOrigin();
+function netSameOrigin() { return /^https?:$/.test(location.protocol) && location.host ? location.origin : ''; }
+const netFixed = () => (/TU-SERVICIO/i.test(MP_SERVER) ? '' : netNormUrl(MP_SERVER));
+const netDefaultUrl = () => netFixed() || netNormUrl(mpStore.get('server', '')) || netSameOrigin();
+
+/* Adaptador: envuelve un socket de Socket.io con la interfaz mínima de WebSocket que usa el juego.
+   Envío:     {t:'create',...}      ->  socket.emit('create', {t:'create',...})
+   Recepción: evento 'room' + datos ->  { t:'room', ...datos } */
+function netSocketWS(url) {
+  const sock = io(url, { transports: ['websocket', 'polling'], reconnection: false, timeout: 8000 });   // la reconexión la gestiona netLost/netConnect
+  let closed = false;
+  const ws = {
+    readyState: 0, onopen: null, onmessage: null, onclose: null, onerror: null,
+    send(s) { let o; try { o = JSON.parse(s); } catch (e) { return; } sock.emit(o.t, o); },
+    close() { ws.readyState = 3; closed = true; sock.close(); },
+  };
+  const fireClose = () => { if (closed) return; closed = true; ws.readyState = 3; if (ws.onclose) ws.onclose(); };
+  sock.on('connect', () => { ws.readyState = 1; if (ws.onopen) ws.onopen(); });
+  sock.onAny((ev, data) => {
+    const m = data && typeof data === 'object' && !Array.isArray(data) ? Object.assign({ t: ev }, data) : { t: ev, d: data };
+    if (ws.onmessage) ws.onmessage({ data: JSON.stringify(m) });
+  });
+  sock.on('connect_error', fireClose);
+  sock.on('disconnect', fireClose);
+  return ws;
+}
 
 /* ---------- conexión ---------- */
 function netSend(o) { if (NET.ws && NET.ws.readyState === 1) { NET.ws.send(JSON.stringify(o)); return true; } return false; }
@@ -2743,7 +2772,9 @@ function netConnect() {
     const url = NET.url || netDefaultUrl();
     if (!url) return reject(new Error('Introduce la dirección de tu servidor (Ajustes avanzados).'));
     NET.url = url; netSetState('connecting'); let done = false, ws;
-    try { ws = new WebSocket(url); } catch (e) { netSetState('off'); return reject(new Error('Dirección de servidor no válida.')); }
+    if (typeof io === 'undefined') { netSetState('off'); return reject(new Error('No se ha cargado la librería Socket.io (revisa tu conexión).')); }
+    if (/^https?:\/\/onrender\.com$/i.test(url)) { netSetState('off'); return reject(new Error('Falta el nombre de tu servicio: https://TU-SERVICIO.onrender.com')); }
+    try { ws = netSocketWS(url); } catch (e) { netSetState('off'); return reject(new Error('Dirección de servidor no válida.')); }
     NET.ws = ws;
     const to = setTimeout(() => { if (!done) { done = true; try { ws.close(); } catch (e) { /* */ } reject(new Error('No se pudo conectar (tiempo agotado).')); } }, 8000);
     ws.onopen = () => {
@@ -2844,6 +2875,7 @@ function renderMpMenu() {
 }
 $('mpModes').addEventListener('click', e => { const b = e.target.closest('[data-mode]'); if (b) { NET.mode = b.dataset.mode; renderMpMenu(); } });
 $('mpCreate').onclick = mpCreate; $('mpJoin').onclick = mpJoin;
+$('mpSrv').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('mpConnect').click(); } });
 $('mpCode').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); mpJoin(); } });
 $('mpCode').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase(); });
 $('mpConnect').onclick = async () => {

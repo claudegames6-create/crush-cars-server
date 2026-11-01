@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>CRUSH CARS</title>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script id="ioFallback">window.io||document.write('<script src="https://crush-cars-server.onrender.com/socket.io/socket.io.js"><\/script>');</script>
 <style>
 :root{--bg:#06080f;--panel:#0d1424;--panel2:#131d35;--line:#1f2e52;--blue:#18c8ff;--blue2:#0a7cff;--orange:#ff7a1a;--orange2:#ffb020;--text:#e8f0ff;--dim:#8191b4;--red:#ff3b5c;--green:#37e08a}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -2727,7 +2728,7 @@ const touchDev = () => document.body.classList.contains('touch');
 
 /* ---------- dirección del servidor (Socket.io) ---------- */
 /* ▼▼▼ PON AQUÍ LA URL DE TU SERVICIO EN RENDER (la que ves en el panel, p. ej. https://crush-cars-abcd.onrender.com) ▼▼▼ */
-const MP_SERVER = 'https://TU-SERVICIO.onrender.com';
+const MP_SERVER = 'https://crush-cars-server.onrender.com';
 /* ▲▲▲ ----------------------------------------------------------------------------------------------------------- ▲▲▲ */
 function netNormUrl(v) {
   v = String(v || '').trim();

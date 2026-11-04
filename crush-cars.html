@@ -823,6 +823,12 @@ body.inrace.touch #touch{display:block}body.inrace{touch-action:none;overscroll-
     <button class="btn" data-cc="150">150cc <small>Máxima velocidad</small></button>
   </div>
   <p class="cc-hint" id="ccHint"></p>
+  <div class="cc-row" id="evRow"><span class="cc-l">EVENTOS</span>
+    <button class="btn" data-ev="off">SIN EVENTOS <small>Carrera pura</small></button>
+    <button class="btn" data-ev="one">UNO A LA VEZ <small>Un evento cada vez</small></button>
+    <button class="btn" data-ev="chaos">CAOS <small>Varios a la vez</small></button>
+  </div>
+  <p class="cc-hint" id="evHint"></p>
   <div class="map-grid" id="mapGrid"></div>
   <div class="actions">
     <div class="curcar">COCHE: <b id="mpCar">VOLT</b> <button class="btn sm" data-go="garage">CAMBIAR</button></div>
@@ -841,6 +847,12 @@ body.inrace.touch #touch{display:block}body.inrace{touch-action:none;overscroll-
     <button class="btn" data-cc="150">150cc <small></small></button>
   </div>
   <p class="cc-hint" id="svHint"></p>
+  <div class="cc-row" id="svEv"><span class="cc-l">EVENTOS</span>
+    <button class="btn" data-ev="off">SIN EVENTOS <small>Carrera pura</small></button>
+    <button class="btn" data-ev="one">UNO A LA VEZ <small>Un evento cada vez</small></button>
+    <button class="btn" data-ev="chaos">CAOS <small>Varios a la vez</small></button>
+  </div>
+  <p class="cc-hint" id="svEvHint"></p>
   <div class="map-grid" id="svGrid"></div>
   <div class="actions">
     <div class="curcar">COCHE: <b id="svCar">VOLT</b> <button class="btn sm" data-go="garage">CAMBIAR</button></div>
@@ -1274,7 +1286,7 @@ const LIVERIES = [
 ];
 const LIV_BY_ID = Object.fromEntries(LIVERIES.map(l => [l.id, l]));
 const SAVE_KEY = 'crushcars.save.v1';
-const defaultSave = () => ({ coins: 250, xp: 0, owned: ['volt'], sel: 'volt', upg: {}, stats: { races: 0, wins: 0, podiums: 0, earned: 0 }, best: {}, bestLap: {}, sound: true, map: 'coast', name: '', avatar: 0, cc: 150, rev: false, surv: { runs: 0, wins: 0, best: 0 }, paint: {}, pad: { on: true, dz: 15, sens: 100, lay: 'auto' } });
+const defaultSave = () => ({ coins: 250, xp: 0, owned: ['volt'], sel: 'volt', upg: {}, stats: { races: 0, wins: 0, podiums: 0, earned: 0 }, best: {}, bestLap: {}, sound: true, map: 'coast', name: '', avatar: 0, cc: 150, rev: false, ev: 'chaos', surv: { runs: 0, wins: 0, best: 0 }, paint: {}, pad: { on: true, dz: 15, sens: 100, lay: 'auto' } });
 function loadSave() {
   const d = defaultSave();
   try {
@@ -1298,6 +1310,7 @@ function loadSave() {
     }
     if (CC_LIST.includes(s.cc)) d.cc = s.cc;
     d.rev = s.rev === true;
+    d.ev = ['off', 'one', 'chaos'].includes(s.ev) ? s.ev : 'chaos';
     if (s.surv && typeof s.surv === 'object') for (const k of ['runs', 'wins', 'best']) d.surv[k] = Math.floor(n(s.surv[k], 0));
     if (s.paint && typeof s.paint === 'object') for (const id in s.paint) {
       const p = s.paint[id]; if (!CAR_BY_ID[id] || !d.owned.includes(id) || !p || !Array.isArray(p.own)) continue;
@@ -1549,7 +1562,7 @@ function makeCar(d) {
     nitMax: d.st.nit, nitro: d.st.nit, nitLock: false, nitOn: false, drift: false, braking: false, offroad: false,
     ti: 0, s: 0, off: 0, nx: 0, ny: 1, ta: 0, lap: -1, maxLap: -1, dist: 0, lapStart: 0, lapTimes: [], bestLap: null,
     finished: false, finishT: 0, finishPos: 0, abT: 0, abCd: 0, ghost: false, shield: false,
-    inp: { thr: 0, brk: 0, str: 0, nit: false, ab: false }, stuckT: 0, skOn: false, skx: [0, 0], sky: [0, 0], pos: 1, wrongT: 0, ai: null, hitFlash: 0,
+    inp: { thr: 0, brk: 0, str: 0, nit: false, ab: false }, stuckT: 0, skOn: false, skx: [0, 0], sky: [0, 0], pos: 1, wrongT: 0, ai: null, hitFlash: 0, zap: 0, tw: 0, twd: 1, twImm: 0, padT: 0, padCd: 0,
   };
 }
 function pointAt(T, s, off) {
@@ -1610,6 +1623,7 @@ function createRace(map, opts = {}) {
   }
   if (!R.demo) for (const c of R.cars) if (!c.human && c.ai) c.lq = launchBotRoll(c.ai.skill, rnd);   // salida de cada bot según su dificultad
   R.cars.forEach(c => { c.dist = c.lap * T.L + c.s; });
+  if (!R.demo && save.ev !== 'off') { EV.fixed = false; R.ev = evInit(); R.ev.mode = save.ev; }   // eventos: 'off' = sin eventos
   return R;
 }
 
@@ -1908,6 +1922,7 @@ function updateRace(R, dt) {
         if (c.human && !c.finished) readPlayerInput(c);
         else { if (c.finished && c.human) c.ai.pace = Math.max(0.35, c.ai.pace - h * 0.15); aiInput(c, R, h); if (c.human) c.ai.auto = true; }
         if (c.human && R.launch && !c.finished) launchInput(c, R, h); else if (c.lq && !c.finished) launchBotInput(c, R, h);
+        if (R.ev && evCarPre(c, R, h)) continue;   // eventos: coche inmovilizado por un rayo
         stepCar(c, c.inp, h, R);
       }
       for (const c of R.cars) progress(c, R, h);
@@ -1917,6 +1932,7 @@ function updateRace(R, dt) {
     // rescate de IA atascada
     for (const c of R.cars) {
       if (c.human || c.finished) continue;
+      if (c.zap > 0 || c.tw > 0) { c.stuckT = 0; continue; }   // inmovilizado / girando por un evento: no es un atasco
       if (c.lq && c.lq.tier === 'fail' && c.lq.t < LAUNCH.FREEZE + LAUNCH.RECOVER) { c.stuckT = 0; continue; }   // salida fallida: está parado a propósito, no es un atasco
       if (Math.hypot(c.vx, c.vy) < 30 && R.t > 1) c.stuckT += dt; else c.stuckT = 0;
       if (c.stuckT > 2.2) { const p = pointAt(R.T, c.s, 0); c.x = p.x; c.y = p.y; c.a = p.a; c.vx = c.vy = 0; c.spin = 0; c.stuckT = 0; }
@@ -1933,6 +1949,7 @@ function updateRace(R, dt) {
   const order = R.cars.slice().sort((a, b) => a.finished !== b.finished ? (a.finished ? -1 : 1) : a.finished ? a.finishT - b.finishT : b.dist - a.dist);
   order.forEach((c, i) => { c.pos = i + 1; }); R.order = order;
   prerollFx(R, dt);
+  if (R.ev) evUpdate(R, dt);
   spawnFx(R, dt);
   updateParticles(dt);
 }
@@ -3362,6 +3379,7 @@ function drawWorld(R) {
   if (Q.lvl < 1) { g.strokeStyle = night ? 'rgba(0,0,0,.22)' : 'rgba(10,10,14,.12)'; g.lineWidth = 7; g.stroke(); }   // halo suave (se omite si el equipo va justo)
   g.strokeStyle = night ? 'rgba(0,0,0,.5)' : 'rgba(10,10,14,.28)'; g.lineWidth = 3.6; g.stroke();   // núcleo del neumático
   g.lineCap = 'butt'; g.lineJoin = 'miter';
+  if (R.ev) evDrawGround(g, R, vx0, vy0, vx1, vy1);   // eventos: plataformas y zonas de rayo en el suelo
   // faros (noche)
   if (night || LT.dusk) {   // haz cacheado (antes: 2 degradados por coche y fotograma); la ciudad lo usa más tenue
     const cone = coneSprite(), ka = night ? 1 : .55;
@@ -3406,6 +3424,7 @@ function drawWorld(R) {
     }
   }
   if (add) { g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
+  if (R.ev) evDrawTop(g, R, vx0, vy0, vx1, vy1);   // eventos: rayos, tornados y chispas
   // iluminación ambiental del circuito: luces de color + viñeta (un solo blit de un sprite cacheado)
   g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   g.drawImage(ambientSpr(T), 0, 0);
@@ -3832,7 +3851,7 @@ function thumb(cnv, map, rev) {
 function renderMaps() {
   const L = playerLevel();
   if (!MAPS.some(m => m.id === save.map && L >= m.lvl)) save.map = MAPS[0].id;
-  $('mpCar').textContent = CAR_BY_ID[save.sel].name;
+  $('mpCar').textContent = CAR_BY_ID[save.sel].name; renderEv();
   $('ccRow').querySelectorAll('[data-cc]').forEach(b => {
     const c = +b.dataset.cc; b.classList.toggle('on', c === save.cc);
     b.querySelector('small').textContent = CC[c].lbl + ' · ×' + fm(save.rev ? REV_RW[c] : CC[c].vis);
@@ -3871,6 +3890,19 @@ $('mapGrid').addEventListener('click', e => {
 $('ccRow').addEventListener('click', e => {
   const b = e.target.closest('[data-cc]'); if (!b) return;
   save.cc = +b.dataset.cc; persist(); renderMaps();
+});
+
+const EV_INFO = { off: 'Sin rayos, tornados ni plataformas: carrera pura.', one: 'Rayos, tornados y plataformas turbo, pero sólo un evento activo a la vez.', chaos: 'Tormentas, tornados y plataformas pueden coincidir: hasta 2 eventos a la vez.' };
+function renderEv() {
+  for (const [id, h] of [['evRow', 'evHint'], ['svEv', 'svEvHint']]) {
+    const row = $(id); if (!row) continue;
+    row.querySelectorAll('[data-ev]').forEach(b => b.classList.toggle('on', b.dataset.ev === save.ev));
+    $(h).innerHTML = '<b>' + { off: 'SIN EVENTOS', one: 'UNO A LA VEZ', chaos: 'CAOS' }[save.ev] + '</b> · ' + EV_INFO[save.ev] + ' (sólo en solitario)';
+  }
+}
+for (const id of ['evRow', 'svEv']) $(id).addEventListener('click', e => {
+  const b = e.target.closest('[data-ev]'); if (!b) return;
+  save.ev = b.dataset.ev; persist(); renderEv();
 });
 $('btnStart').addEventListener('click', () => startRace(MAPS.find(m => m.id === save.map) || MAPS[0], save.rev, save.cc));
 
@@ -4019,7 +4051,7 @@ $('pfReset').onclick = () => {
   const b = $('pfReset');
   if (!b.dataset.arm) { b.dataset.arm = 1; b.textContent = '¿SEGURO? PULSA OTRA VEZ'; b._t = setTimeout(() => { delete b.dataset.arm; b.textContent = 'BORRAR PROGRESO'; }, 4000); return; }
   clearTimeout(b._t); delete b.dataset.arm; b.textContent = 'BORRAR PROGRESO';
-  const id = { name: save.name, avatar: save.avatar, pad: save.pad }; save = Object.assign(defaultSave(), id); persist(); renderProfile(); toast('Progreso borrado');
+  const id = { name: save.name, avatar: save.avatar, pad: save.pad, ev: save.ev }; save = Object.assign(defaultSave(), id); persist(); renderProfile(); toast('Progreso borrado');
 };
 
 /* ---------- carrera ---------- */
@@ -4147,7 +4179,7 @@ function renderSurvival() {
   $('svFlow').innerHTML = SURV_ROUNDS.map((r, i) => `<span class="chip2 ${i === 3 ? 'rv' : ''}">${i === 3 ? '🏆 FINAL · ' + r.n + ' → 1' : 'RONDA ' + (i + 1) + ' · ' + r.n + ' → ' + r.k}</span>`).join('');
   $('svCc').querySelectorAll('[data-cc]').forEach(b => { const c = +b.dataset.cc; b.classList.toggle('on', c === save.cc); b.querySelector('small').textContent = CC[c].lbl + ' · premios ×' + fm(CC[c].rw); });
   $('svHint').innerHTML = `<b>${save.cc}cc</b> · ${CC[save.cc].txt} Premios <b>×${fm(f)}</b>. Si no clasificas, quedas eliminado y empiezas de nuevo.`;
-  $('svCar').textContent = CAR_BY_ID[save.sel].name;
+  $('svCar').textContent = CAR_BY_ID[save.sel].name; renderEv();
   $('svRec').textContent = `Partidas ${sv.runs} · Victorias ${sv.wins} · Mejor: ronda ${sv.best}/4`;
   $('svGrid').innerHTML = SURV_MAPS.map((m, i) => {
     const mm = MAP_META[m.id], R = SURV_ROUNDS[i];
@@ -4240,9 +4272,9 @@ $('pfInput').addEventListener('keydown', e => { if (e.key === 'Enter') submitPro
 /* ---------- navegación vertical por menús (↑ ↓ Enter) ---------- */
 const nav = { i: 0 };
 const NAVSEL = {
-  menu: '#menu .menu-btns .btn', modes: '#modes .md-btn', maps: '#ccRow .btn, #mapGrid .card, #mapGrid .card:not(.locked) .dir, #maps .actions .btn',
+  menu: '#menu .menu-btns .btn', modes: '#modes .md-btn', maps: '#ccRow .btn, #evRow .btn, #mapGrid .card, #mapGrid .card:not(.locked) .dir, #maps .actions .btn',
   garage: '#gvStats [data-upg]:not(:disabled), #garage .actions .btn:not(:disabled)', shop: '#shopGrid .card',
-  survival: '#svCc .btn, #survival .actions .btn', profile: '#profile .btn', settings: '#settings .btn', paint: '#ptBuy, #paint .sw', results: '#resBox .rbtns .btn', pause: '#pause .pbox .btn',
+  survival: '#svCc .btn, #svEv .btn, #survival .actions .btn', profile: '#profile .btn', settings: '#settings .btn', paint: '#ptBuy, #paint .sw', results: '#resBox .rbtns .btn', pause: '#pause .pbox .btn',
 };
 function navList() {
   const s = NAVSEL[mode]; if (!s) return [];
@@ -4428,7 +4460,7 @@ function frame(now) {
   try {
     if (mode === 'race' && race) {
       const dt = Math.min(0.05, raw / 1000);
-      updateRace(race, dt); if (race.launch) race.launch.anc = { t: race.t, ts: now }; updateCamera(race, dt); drawWorld(race); drawHUD(race);
+      updateRace(race, dt); if (race.launch) race.launch.anc = { t: race.t, ts: now }; updateCamera(race, dt); drawWorld(race); drawHUD(race); if (race.ev) evHUD(race);
       if (race.state === 'count') { if (race.t < -0.7) prebakeAhead(race, 1); } else if ((FR & 3) === 0) prebakeAhead(race, 1);
       const p = race.player, spd = Math.hypot(p.vx, p.vy);
       const bn = race.launch ? race.launch.burn : 0, cl = race.clock;
@@ -4451,6 +4483,370 @@ function frame(now) {
     // resto de pantallas (circuitos, tienda, perfil, bienvenida): sin simulación ni render
   } catch (err) { console.error(err); }
 }
+/* =====================================================================
+   EVENTOS DE CARRERA · rayos, tornados y plataformas turbo
+   Módulo añadido: sólo Carrera y Supervivencia en solitario (R.ev). No hay red, ni cambios en MP-CORE, ni en las físicas
+   base: los efectos sólo actúan sobre las entradas (c.inp), el giro (c.spin) y la velocidad del coche justo antes de stepCar.
+   Rendimiento: 4 objetos de evento preasignados (sin crear/destruir), partículas del pool global P (emit), sprites de brillo
+   cacheados (glowSpr), sin sombras de canvas, culling por vista y detalle reducido con Q.lvl / Q.fx.
+   ===================================================================== */
+const EV = {
+  GAP_Z: 80, GAP_W: 600,                                    // separación mínima entre rayos (hueco libre) y entre tornados (px)
+  FIRST: 8, GAP0: 5, GAP1: 9, MAX: 2,                      // primer evento a los ~8 s; luego cada 5–9 s; hasta 2 a la vez
+  FILL: 2.0, WAIT: 3.0, STUN: 2.0, STRIKE_T: 3.2,           // rayo: relleno 2 s · espera 3 s · inmovilizado 2 s
+  TW_LIFE: 16, TW_SPIN: 3, TW_SPD: 300,                     // tornado: dura 16 s · giro 3 s
+  PAD_LIFE: 15,                                             // plataformas: 15 s
+  TYPES: ['bolt', 'tornado', 'pads'],
+  calm: !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches),
+  DASH: [20, 14], NODASH: [],
+  ICON: [[.15, -1], [-.55, .1], [-.05, .1], [-.2, 1], [.6, -.2], [.1, -.2]],
+  TWC: ['rgba(46,50,70,', 'rgba(62,68,92,', 'rgba(82,90,118,', 'rgba(104,112,142,', 'rgba(128,136,166,', 'rgba(152,160,188,'],
+};
+let evSeq = 0;
+const evWrap = (d, L) => { d %= L; if (d > L / 2) d -= L; else if (d < -L / 2) d += L; return d; };
+const evNear = (R, x, y, r) => !!R.player && Math.hypot(R.player.x - x, R.player.y - y) < r;
+const evVis = (x, y, r, vx0, vy0, vx1, vy1) => x + r > vx0 && x - r < vx1 && y + r > vy0 && y - r < vy1;
+
+/* Cada evento es una TORMENTA repartida por todo el circuito: muchas zonas de rayo / tornados / plataformas a la vez, siempre separados entre sí.
+   Todo está preasignado (sin crear objetos en carrera) y la cantidad baja con la calidad gráfica (Q.lvl). */
+const evCnt = (a, b, c) => EV.fixed ? b : Q.lvl >= 2 ? c : Q.lvl >= 1 ? b : a;   // online: cantidad fija para que todos vean lo mismo
+function evInit(rnd) {
+  rnd = rnd || Math.random;
+  const zn = () => ({ a: false, t: 0, x: 0, y: 0, r: 150, struck: false, st: 0, tk: 9, pts: new Float32Array(24), br: new Float32Array(16) });
+  const tw = () => ({ a: false, t: 0, x: 0, y: 0, s: 0, dir: 1, ph: 0, rot: 0, sc: 0, R0: 150, snd: 0, amp: .55 });
+  const pd = () => ({ s: 0, off: 0, len: 170, wid: 100, x: 0, y: 0, a: 0, hit: 0 });
+  const arr = (n, f) => Array.from({ length: n }, f);
+  return {
+    rnd, next: EV.FIRST + rnd() * 3, bag: [], last: '', flash: 0, ban: '', banC: '#fff', banT: 0,
+    bolt: { on: false, t: 0, Z: arr(24, zn) },
+    tornado: { on: false, t: 0, W: arr(9, tw) },
+    pads: { on: false, t: 0, life: EV.PAD_LIFE, n: 0, P: arr(18, pd) },
+  };
+}
+function evBan(V, txt, col) { V.ban = txt; V.banC = col; V.banT = 2.4; }
+function evNextType(V) {
+  let act = 0; for (const k of EV.TYPES) if (V[k].on) act++;
+  if (act >= (V.mode === 'one' ? 1 : EV.MAX)) return null;   // 'one' = uno a la vez · 'chaos' = varios a la vez
+  if (!V.bag.length) {
+    const b = EV.TYPES.slice();
+    for (let i = b.length - 1; i > 0; i--) { const j = (V.rnd() * (i + 1)) | 0, t = b[i]; b[i] = b[j]; b[j] = t; }
+    if (b[b.length - 1] === V.last) { const t = b[0]; b[0] = b[b.length - 1]; b[b.length - 1] = t; }   // nunca repite el tipo anterior
+    V.bag = b;
+  }
+  for (let i = V.bag.length - 1; i >= 0; i--) { const ty = V.bag[i]; if (!V[ty].on) { V.bag.splice(i, 1); V.last = ty; return ty; } }
+  return null;
+}
+function evAnchor(R) {   // coche sobre el que se coloca el peligro; online: punto del circuito (igual para todos, sin depender de los coches)
+  const V = R.ev, p = R.player;
+  if (R.net) return { s: V.rnd() * R.T.L, vx: 700, vy: 0, x: 0, y: 0 };
+  if (p && !p.finished && V.rnd() < .55) return p;
+  const a = R.cars.filter(x => !x.finished);
+  return a.length ? a[(V.rnd() * a.length) | 0] : (p || R.cars[0]);
+}
+function evSpawn(R, ty) {
+  const V = R.ev, T = R.T, c = evAnchor(R), p = R.net ? c : (R.player || R.cars[0]), spd = clamp(Math.hypot(c.vx, c.vy), 350, 800), L = T.L;
+  if (ty === 'bolt') {   // tormenta: muchas zonas repartidas por TODO el circuito, separadas entre sí (nunca se solapan)
+    const e = V.bolt, n = evCnt(22, 15, 8); e.on = true; e.t = 0; let k = 0;
+    for (let i = 0; i < e.Z.length; i++) e.Z[i].a = false;
+    for (let i = 0; i < n; i++) {
+      const dly = i * .28 + V.rnd() * 1.0, car = i === 0 ? p : i < 5 ? evAnchor(R) : null;   // dly = retardo escalonado (t<0 hasta que empieza)
+      const r = clamp(T.hw * (.45 + V.rnd() * .45), 90, 210);
+      for (let tr = 0; tr < 24; tr++) {   // hasta 24 intentos de encontrar un hueco libre; si no lo hay, esa zona no se crea
+        const s = car && tr < 12 ? car.s + clamp(Math.hypot(car.vx, car.vy), 350, 800) * (EV.FILL + EV.WAIT + dly) * .9 + V.rnd() * 250 : V.rnd() * L;   // las 3 primeras caen donde estará un coche cuando llegue el rayo
+        const pt = pointAt(T, s, (V.rnd() - .5) * T.hw * 1.1);
+        let ok = true; for (let q = 0; q < k; q++) { const o = e.Z[q]; if (Math.hypot(o.x - pt.x, o.y - pt.y) < o.r + r + EV.GAP_Z) { ok = false; break; } }
+        if (!ok) continue;
+        const z = e.Z[k++]; z.a = true; z.x = pt.x; z.y = pt.y; z.r = r; z.struck = false; z.st = 0; z.tk = 9; z.t = -dly; break;
+      }
+    }
+    evBan(V, '⚠ TORMENTA DE RAYOS', '#ffd23f');
+    Snd.beep(880, .09, .07, 'square'); setTimeout(() => Snd.beep(1175, .12, .07, 'square'), 120);
+  } else if (ty === 'tornado') {   // varios tornados repartidos por el circuito, siempre separados entre sí
+    const e = V.tornado, n = evCnt(9, 6, 4); e.on = true; e.t = 0; let k = 0;
+    for (let i = 0; i < e.W.length; i++) e.W[i].a = false;
+    for (let i = 0; i < n; i++) {
+      const base = c.s + 900 + i * (L / n);
+      for (let tr = 0; tr < 12; tr++) {
+        const s = base + (tr < 8 ? (V.rnd() - .5) * .4 * (L / n) : 0), pt = pointAt(T, s, 0);
+        let ok = true; for (let q = 0; q < k; q++) if (Math.hypot(e.W[q].x - pt.x, e.W[q].y - pt.y) < EV.GAP_W) { ok = false; break; }
+        if (!ok && tr < 11) continue;
+        const w = e.W[k++]; w.a = true; w.s = s; w.x = pt.x; w.y = pt.y; w.t = -i * .4; w.dir = V.rnd() < .5 ? -1 : 1; w.ph = V.rnd() * TAU; w.rot = 0; w.sc = 0; w.R0 = clamp(T.hw * (.8 + V.rnd() * .5), 120, 200); w.snd = 0; w.amp = .5 + V.rnd() * .45; break;
+      }
+    }
+    evBan(V, '⚠ ¡TORNADOS!', '#b8c4ff');
+    Snd.sweep(300, 720, .5, .07, 'sine'); setTimeout(() => Snd.sweep(720, 300, .5, .07, 'sine'), 480);
+  } else {   // plataformas turbo por todo el circuito
+    const e = V.pads, n = evCnt(18, 14, 10); e.on = true; e.t = 0; e.life = EV.PAD_LIFE; e.n = n;
+    for (let i = 0; i < n; i++) {
+      const pd = e.P[i], s = c.s + 500 + i * (L / n) + (V.rnd() - .5) * 220, off = (V.rnd() - .5) * T.hw * .9, pt = pointAt(T, s, off);
+      pd.s = ((s % L) + L) % L; pd.off = off; pd.wid = T.hw * .62; pd.len = 170; pd.x = pt.x; pd.y = pt.y; pd.a = pt.a; pd.hit = 0;
+    }
+    evBan(V, '▲ ZONA TURBO', '#4cc9ff');
+    Snd.sweep(400, 900, .25, .05, 'triangle');
+  }
+}
+
+/* ---------- por frame: calendario, peligros y efectos de partículas ---------- */
+function evUpdate(R, dt) {
+  const V = R.ev; if (!V || R.state === 'count') return;
+  if (R.net) { const d = R.t - (V.lt == null ? R.t : V.lt); V.lt = R.t; dt = clamp(d, 0, 0.25); }   // online: el reloj de la carrera es común
+  const p = R.player;
+  V.flash = Math.max(0, V.flash - dt * 2.6); if (V.banT > 0) V.banT -= dt;
+  if (R.state !== 'finish' && !(p && p.finished)) {
+    V.next -= dt;
+    if (V.next <= 0) { const ty = evNextType(V); if (ty) { evSpawn(R, ty); V.next = EV.GAP0 + Math.random() * (EV.GAP1 - EV.GAP0); } else V.next = 1.5; }
+  }
+  if (V.bolt.on) evBolt(R, V.bolt, dt);
+  if (V.tornado.on) evTornado(R, V.tornado, dt);
+  if (V.pads.on) evPads(R, V.pads, dt);
+  const fx = Q.fx;
+  for (const c of R.cars) {
+    if (c.zap > 0) {
+      if (Math.random() < .55 * fx) emit(1, c.x + (Math.random() - .5) * c.len, c.y + (Math.random() - .5) * c.len, (Math.random() - .5) * 160, (Math.random() - .5) * 160, .22, 1.8, '#bfeaff');
+      if (Math.random() < .12 * fx) emit(0, c.x, c.y, (Math.random() - .5) * 40, (Math.random() - .5) * 40, .8, 9, 'rgba(70,72,90,');
+    }
+    if (c.tw > 0 && Math.random() < .5 * fx) emit(0, c.x + (Math.random() - .5) * c.len * .8, c.y + (Math.random() - .5) * c.len * .8, (Math.random() - .5) * 90, (Math.random() - .5) * 90, .5, 7 + Math.random() * 5, 'rgba(190,192,206,');
+    if (c.padT > 0 && Math.random() < .8 * fx) {
+      const ca = Math.cos(c.a), sa = Math.sin(c.a);
+      emit(2, c.x - ca * c.len * .4, c.y - sa * c.len * .4, -ca * 260 + (Math.random() - .5) * 60, -sa * 260 + (Math.random() - .5) * 60, .22, 5 + Math.random() * 3, Math.random() < .5 ? '#4cc9ff' : '#bfeaff');
+    }
+  }
+}
+function evBolt(R, e, dt) {
+  e.t += dt; const total = EV.FILL + EV.WAIT; let any = false;
+  for (const z of e.Z) {
+    if (!z.a) continue; any = true; z.t += dt;
+    if (z.t < 0) continue;
+    if (!z.struck) {
+      if (z.t > EV.FILL) { const tk = Math.ceil(total - z.t); if (tk !== z.tk) { z.tk = tk; if (tk > 0 && evNear(R, z.x, z.y, 1600) && Snd.gate('tick', 90)) Snd.beep(tk === 1 ? 1500 : 1050, .07, .06, 'square'); } }
+      if (z.t >= total) evStrike(R, R.ev, z);
+    } else { z.st += dt; if (z.st > EV.STRIKE_T) z.a = false; }
+  }
+  if (!any) e.on = false;
+}
+function evStrike(R, V, e) {
+  e.struck = true; e.st = 0;
+  const sx = (Math.random() - .5) * 300, pts = e.pts;
+  for (let i = 0; i < 12; i++) { const f = i / 11, j = i > 0 && i < 11 ? 70 : 0; pts[i * 2] = e.x + (1 - f) * sx + (Math.random() - .5) * j; pts[i * 2 + 1] = e.y - (1 - f) * 1000; }
+  for (let b = 0; b < 2; b++) {   // dos ramificaciones
+    const i0 = b ? 7 : 4, dir = b ? 1 : -1; let px = pts[i0 * 2], py = pts[i0 * 2 + 1];
+    for (let k = 0; k < 4; k++) { e.br[b * 8 + k * 2] = px; e.br[b * 8 + k * 2 + 1] = py; px += dir * (30 + Math.random() * 40); py += 50 + Math.random() * 40; }
+  }
+  const near = evNear(R, e.x, e.y, 1000);
+  V.flash = Math.max(V.flash, near ? (EV.calm ? .25 : .8) : (EV.calm ? .06 : .25));
+  if (R.player) R.shake = Math.max(R.shake, clamp(1 - Math.hypot(R.player.x - e.x, R.player.y - e.y) / 1400, 0, .9));
+  if (near) { if (Snd.gate('thd', 140)) { Snd.crash(.95); Snd.sweep(1800, 50, .45, .15, 'sawtooth'); Snd.whoosh(.7, .2, 3000, 200); } } else if (Snd.gate('thd2', 220)) Snd.crash(.3);
+  const n = (16 * Q.fx | 0) + 3;
+  for (let k = 0; k < n; k++) { const a = k / n * TAU, v = 200 + Math.random() * 520; emit(1, e.x + Math.cos(a) * e.r * .3, e.y + Math.sin(a) * e.r * .3, Math.cos(a) * v, Math.sin(a) * v, .3 + Math.random() * .35, 2 + Math.random() * 2.5, Math.random() < .5 ? '#bfeaff' : '#fff6a8'); }
+  for (let k = 0; k < (4 * Q.fx | 0) + 1; k++) emit(0, e.x + (Math.random() - .5) * e.r, e.y + (Math.random() - .5) * e.r, (Math.random() - .5) * 80, (Math.random() - .5) * 80, .9, 12 + Math.random() * 8, 'rgba(70,72,90,');
+  for (const c of R.cars) {
+    if (c.finished || c.zap > 0 || (R.net && c !== R.player)) continue;
+    if (Math.hypot(c.x - e.x, c.y - e.y) < e.r + c.len * .25) evZap(c, R);
+  }
+}
+function evZap(c, R) {
+  c.zap = EV.STUN; c.vx = c.vy = c.spin = 0; c.tw = 0; c.padT = 0;
+  const n = (10 * Q.fx | 0) + 3;
+  for (let k = 0; k < n; k++) { const a = Math.random() * TAU, v = 120 + Math.random() * 420; emit(1, c.x, c.y, Math.cos(a) * v, Math.sin(a) * v, .3 + Math.random() * .3, 2 + Math.random() * 2, Math.random() < .5 ? '#bfeaff' : '#fff6a8'); }
+  if (c.human) { R.msg = '¡ELECTROCUTADO!'; R.msgT = 1.6; R.shake = Math.max(R.shake, .8); }
+}
+function evTornado(R, e, dt) {
+  const T = R.T, W6 = e.W; e.t += dt; let any = false;
+  for (const w of W6) { if (!w.a) continue; any = true; w.t += dt; if (w.t >= 0) w.s += w.dir * EV.TW_SPD * dt; }
+  for (let pass = 0; pass < 2; pass++) for (let i = 0; i < W6.length; i++) for (let j = i + 1; j < W6.length; j++) {   // separación mínima (EV.GAP_W) entre tornados: nunca ocupan el mismo sitio
+    const w = W6[i], o = W6[j]; if (!w.a || !o.a || w.t < 0 || o.t < 0) continue;
+    const ds = evWrap(o.s - w.s, T.L), ad = Math.abs(ds); if (ad >= EV.GAP_W) continue;
+    const sg = ds < 0 ? -1 : 1, push = (EV.GAP_W - ad) / 2 + .01;
+    w.s -= sg * push; o.s += sg * push; w.dir = -sg; o.dir = sg;   // se separan y dan la vuelta
+  }
+  for (const w of W6) {
+    if (!w.a || w.t < 0) continue;
+    w.rot += dt * 5.5;
+    const pt = pointAt(T, w.s, Math.sin(w.t * .9 + w.ph) * T.hw * w.amp); w.x = pt.x; w.y = pt.y;
+    const rem = EV.TW_LIFE - w.t; let sc = Math.min(1, w.t / 2.4); if (rem < 1.6) sc *= Math.max(0, rem / 1.6); w.sc = sc;
+    if (rem <= 0) { w.a = false; continue; }
+    const rr = w.R0 * sc;
+    if (w.t > 2.2 && rem > .5) for (const c of R.cars) {   // los dos primeros segundos son sólo aviso (crece y silba)
+      if (c.finished || c.zap > 0 || c.tw > 0 || c.twImm > 0 || (R.net && c !== R.player)) continue;
+      const dx = w.x - c.x, dy = w.y - c.y, d = Math.hypot(dx, dy) + 1e-6;
+      if (d < rr * .8) {
+        c.tw = EV.TW_SPIN; c.twd = Math.random() < .5 ? 1 : -1; c.twImm = EV.TW_SPIN + 1.2;   // 3 s girando + 1,2 s de inmunidad para poder salir
+        if (c.human) { R.msg = '¡TORNADO!'; R.msgT = 1.4; Snd.sweep(240, 980, .6, .08, 'triangle'); }
+      } else if (d < rr * 1.7) { const f = 380 * (1 - d / (rr * 1.7)) * dt / d; c.vx += dx * f; c.vy += dy * f; }   // ligera succión
+    }
+    if (sc > .2 && Math.random() < .7 * Q.fx) { const a = Math.random() * TAU, ca = Math.cos(a), sa = Math.sin(a); emit(0, w.x + ca * rr * .8, w.y + sa * rr * .8, -sa * 160, ca * 160, .8, 9 + Math.random() * 8, 'rgba(176,182,200,'); }
+    if (R.player && Math.hypot(R.player.x - w.x, R.player.y - w.y) < rr * 1.6) R.shake = Math.max(R.shake, .12);
+    w.snd -= dt; if (w.snd <= 0) { w.snd = .9; if (evNear(R, w.x, w.y, 1100) && Snd.gate('twh', 300)) Snd.whoosh(.8, .07, 180, 620); }
+  }
+  if (!any) e.on = false;
+}
+function evPads(R, e, dt) {
+  e.t += dt; const T = R.T;
+  if (e.t > e.life) { e.on = false; return; }
+  for (let i = 0; i < e.n; i++) if (e.P[i].hit > 0) e.P[i].hit -= dt;
+  if (e.t < .4 || e.life - e.t < .3) return;
+  for (const c of R.cars) {
+    if (c.finished || c.zap > 0 || c.padCd > 0 || (R.net && c !== R.player)) continue;
+    for (let i = 0; i < e.n; i++) { const pd = e.P[i]; if (Math.abs(evWrap(c.s - pd.s, T.L)) < pd.len * .5 && Math.abs(c.off - pd.off) < pd.wid * .5) { evPadHit(R, c, pd); break; } }
+  }
+}
+function evPadHit(R, c, pd) {
+  c.padT = .9; c.padCd = .6; pd.hit = .4;
+  c.vx += Math.cos(c.a) * 140; c.vy += Math.sin(c.a) * 140;
+  if (c.human) { R.shake = Math.max(R.shake, .2); if (Snd.gate('pad', 150)) { Snd.whoosh(.4, .16, 500, 2600); Snd.sweep(320, 1200, .3, .08, 'triangle'); Snd.beep(1040, .07, .06, 'triangle'); } }
+  else if (evNear(R, c.x, c.y, 800) && Snd.gate('padb', 250)) Snd.whoosh(.3, .05, 500, 1800);
+}
+
+/* ---------- por subpaso de física: efectos que actúan sobre un coche (devuelve true = sin física este paso) ---------- */
+function evCarPre(c, R, h) {
+  if (c.padCd > 0) c.padCd -= h;
+  if (c.twImm > 0) c.twImm -= h;
+  const i = c.inp;
+  if (c.zap > 0) {   // rayo: inmovilizado del todo
+    c.zap -= h; c.vx = c.vy = c.spin = 0; c.steer = 0; c.nitOn = c.drift = c.braking = false;
+    i.thr = i.brk = i.str = 0; i.nit = i.ab = false;
+    return true;
+  }
+  if (c.tw > 0) {    // tornado: gira sobre sí mismo, sin salir despedido (velocidad amortiguada y limitada)
+    c.tw -= h; i.thr = i.brk = i.str = 0; i.nit = i.ab = false;
+    c.spin = c.twd * (7.4 + 1.6 * Math.sin(c.tw * 8.3));
+    const k = Math.exp(-1.3 * h); c.vx *= k; c.vy *= k;
+    const sp = Math.hypot(c.vx, c.vy); if (sp > 360) { const f = 360 / sp; c.vx *= f; c.vy *= f; }
+  }
+  if (c.padT > 0) {  // plataforma: empuje extra hacia delante (se desvanece solo al terminar)
+    c.padT -= h;
+    const ca = Math.cos(c.a), sa = Math.sin(c.a), vf = c.vx * ca + c.vy * sa;
+    if (vf < c.st.vmax * 1.4) { c.vx += ca * 1900 * h; c.vy += sa * 1900 * h; }
+  }
+  return false;
+}
+
+/* ---------- dibujo ---------- */
+function evDrawGround(g, R, vx0, vy0, vx1, vy1) {
+  const V = R.ev, t = R.clock;
+  if (V.pads.on) evDrawPads(g, V.pads, t, vx0, vy0, vx1, vy1);
+  if (V.bolt.on) for (const z of V.bolt.Z) if (z.a && z.t >= 0 && evVis(z.x, z.y, z.r * 1.6, vx0, vy0, vx1, vy1)) evDrawZone(g, z, t);
+}
+function evDrawPads(g, e, t, vx0, vy0, vx1, vy1) {
+  const rem = e.life - e.t, ap = Math.min(1, e.t / .45); let a = ap * Math.min(1, rem / .5);
+  if (rem < 2.2) a *= (((rem * 8) | 0) & 1) ? 1 : .35;
+  const pop = .75 + .25 * (1 - (1 - ap) * (1 - ap)), glow = Q.lvl < 2, m = (t * 1.5) % 1;
+  for (let i = 0; i < e.n; i++) {
+    const pd = e.P[i];
+    if (!evVis(pd.x, pd.y, pd.len, vx0, vy0, vx1, vy1)) continue;
+    const L2 = pd.len / 2, W2 = pd.wid / 2, hit = Math.max(0, pd.hit) * 2.5, hw = W2 * .62;
+    g.save(); g.translate(pd.x, pd.y); g.rotate(pd.a); g.scale(pop, pop);
+    g.globalAlpha = a; g.fillStyle = 'rgba(8,34,120,.82)'; rr(g, -L2, -W2, pd.len, pd.wid, 9); g.fill();
+    g.globalAlpha = a * (.35 + .5 * hit); g.fillStyle = '#2a8cff'; rr(g, -L2 + 6, -W2 + 6, pd.len - 12, pd.wid - 12, 6); g.fill();
+    g.globalAlpha = a; g.strokeStyle = '#46c2ff'; g.lineWidth = 3.5; rr(g, -L2, -W2, pd.len, pd.wid, 9); g.stroke();
+    g.strokeStyle = '#c4efff'; g.lineWidth = 5; g.lineJoin = 'miter';
+    for (let k = 0; k < 4; k++) {   // chevrones ^ que avanzan en el sentido del impulso
+      const f = (k + m) / 4, x = -L2 + f * pd.len; g.globalAlpha = a * Math.sin(f * Math.PI) * (.8 + .2 * hit);
+      g.beginPath(); g.moveTo(x - 13, -hw); g.lineTo(x + 11, 0); g.lineTo(x - 13, hw); g.stroke();
+    }
+    if (glow) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = a * (.2 + .3 * hit); g.strokeStyle = '#2f9bff'; g.lineWidth = 12; rr(g, -L2, -W2, pd.len, pd.wid, 9); g.stroke(); }
+    g.restore();
+  }
+}
+function evBoltIcon(g, x, y, s) {
+  const I = EV.ICON; g.beginPath();
+  for (let i = 0; i < 6; i++) { const px = x + I[i][0] * s, py = y + I[i][1] * s; i ? g.lineTo(px, py) : g.moveTo(px, py); }
+  g.closePath(); g.fill();
+}
+function evDrawZone(g, e, t) {
+  const x = e.x, y = e.y, r = e.r;
+  if (!e.struck) {
+    const fp = Math.min(1, e.t / EV.FILL), ease = 1 - (1 - fp) * (1 - fp), waiting = e.t > EV.FILL, wp = waiting ? (e.t - EV.FILL) / EV.WAIT : 0;
+    const pulse = waiting ? .5 + .5 * Math.sin(t * (9 + wp * 22)) : 1, rf = r * ease;
+    g.fillStyle = 'rgba(255,214,60,.09)'; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    if (rf > 3) {   // relleno desde el centro hacia fuera
+      g.fillStyle = 'rgba(255,208,40,' + (waiting ? .16 + .16 * pulse : .2) + ')'; g.beginPath(); g.arc(x, y, rf, 0, TAU); g.fill();
+      if (Q.lvl < 2) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = .55; g.drawImage(glowSpr('255,214,64', 128), x - rf, y - rf, rf * 2, rf * 2); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; }
+      if (!waiting) { g.strokeStyle = '#fff2a0'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, rf, 0, TAU); g.stroke(); }
+    }
+    g.setLineDash(EV.DASH); g.lineDashOffset = -t * 60; g.strokeStyle = waiting && pulse > .5 ? '#ffffff' : '#ffd23f'; g.lineWidth = 5;
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.stroke(); g.setLineDash(EV.NODASH);
+    if (waiting) { g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, Math.max(2, r * (1 - wp)), 0, TAU); g.stroke(); }   // anillo de cuenta atrás
+    g.fillStyle = '#fff6b0'; g.globalAlpha = waiting ? .5 + .5 * pulse : .35 * ease; evBoltIcon(g, x, y, r * .3); g.globalAlpha = 1;
+  } else {
+    const k = e.st / EV.STRIKE_T, rp = Math.min(1, e.st * 2.2);
+    g.fillStyle = 'rgba(8,8,16,' + (.34 * (1 - k)) + ')'; g.beginPath(); g.arc(x, y, r * .85, 0, TAU); g.fill();   // chamusquina
+    if (rp < 1) { g.strokeStyle = 'rgba(150,220,255,' + (1 - rp) + ')'; g.lineWidth = 6 * (1 - rp) + 1; g.beginPath(); g.arc(x, y, r * (.4 + .9 * rp), 0, TAU); g.stroke(); }
+  }
+}
+function evDrawTop(g, R, vx0, vy0, vx1, vy1) {
+  const V = R.ev, t = R.clock;
+  // chispas eléctricas sobre los coches inmovilizados
+  if (Q.lvl < 2) for (const c of R.cars) {
+    if (!(c.zap > 0) || !evVis(c.x, c.y, 80, vx0, vy0, vx1, vy1)) continue;
+    g.globalCompositeOperation = 'lighter'; g.globalAlpha = .35 * (.6 + .4 * Math.sin(t * 40)); g.drawImage(glowSpr('150,210,255', 64), c.x - c.len * 1.1, c.y - c.len * 1.1, c.len * 2.2, c.len * 2.2);
+    g.globalAlpha = .9; g.strokeStyle = '#bfe6ff'; g.lineWidth = 2.2; g.beginPath();
+    for (let n = 0; n < 3; n++) { let px = c.x + (Math.random() - .5) * c.len * .5, py = c.y + (Math.random() - .5) * c.len * .5; g.moveTo(px, py); for (let m = 0; m < 3; m++) { px += (Math.random() - .5) * 40; py += (Math.random() - .5) * 40; g.lineTo(px, py); } }
+    g.stroke(); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  }
+  // rayos
+  if (V.bolt.on) for (const b of V.bolt.Z) {
+    if (!b.a || !b.struck || b.st >= .5 || !evVis(b.x, b.y, 1100, vx0, vy0, vx1, vy1)) continue;
+    const k = b.st / .5, fl = (b.st < .14 ? 1 : .6 + .4 * Math.sin(b.st * 80)) * (1 - k), p = b.pts, br = b.br;
+    g.globalCompositeOperation = 'lighter'; g.lineJoin = 'round'; g.lineCap = 'round';
+    if (Q.lvl < 2) { g.globalAlpha = fl; g.drawImage(glowSpr('190,225,255', 128), b.x - b.r * 1.7, b.y - b.r * 1.7, b.r * 3.4, b.r * 3.4); }
+    g.beginPath(); g.moveTo(p[0], p[1]); for (let i = 1; i < 12; i++) g.lineTo(p[i * 2], p[i * 2 + 1]);
+    for (let q = 0; q < 2; q++) { g.moveTo(br[q * 8], br[q * 8 + 1]); for (let i = 1; i < 4; i++) g.lineTo(br[q * 8 + i * 2], br[q * 8 + i * 2 + 1]); }
+    g.globalAlpha = .25 * fl; g.strokeStyle = '#6ab8ff'; g.lineWidth = 20; g.stroke();
+    g.globalAlpha = .6 * fl; g.strokeStyle = '#bfe6ff'; g.lineWidth = 8; g.stroke();
+    g.globalAlpha = fl; g.strokeStyle = '#fff'; g.lineWidth = 3; g.stroke();
+    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.lineJoin = 'miter'; g.lineCap = 'butt';
+  }
+  // tornados
+  if (V.tornado.on) for (const w of V.tornado.W) if (w.a && w.t >= 0 && w.sc > .02 && evVis(w.x, w.y, w.R0 * 1.4, vx0, vy0, vx1, vy1)) evDrawTornado(g, w, t);
+}
+function evDrawTornado(g, e, t) {
+  const sc = e.sc, R0 = e.R0 * sc, layers = Q.lvl >= 2 ? 3 : Q.lvl >= 1 ? 4 : 6;
+  if (e.t < 2.4) {   // aviso: marca de la zona de peligro final
+    g.setLineDash(EV.DASH); g.lineDashOffset = -t * 40; g.strokeStyle = 'rgba(255,90,90,' + (.45 + .3 * Math.sin(t * 10)) + ')'; g.lineWidth = 4;
+    g.beginPath(); g.arc(e.x, e.y, e.R0 * .8, 0, TAU); g.stroke(); g.setLineDash(EV.NODASH);
+  }
+  if (Q.lvl < 2) { g.globalAlpha = .35 * sc; g.drawImage(glowSpr('90,96,125', 128), e.x - R0 * 1.4, e.y - R0 * 1.4, R0 * 2.8, R0 * 2.8); g.globalAlpha = 1; }
+  for (let i = 0; i < layers; i++) {   // embudo visto desde arriba: capas cada vez más anchas y desplazadas hacia arriba
+    const f = i / (layers - 1), r = R0 * (.28 + .72 * f), cx = e.x + Math.sin(t * 3 + f * 4) * 5 * f, cy = e.y - f * R0 * .5, ci = Math.min(5, Math.round(f * 5));
+    g.fillStyle = EV.TWC[ci] + (.2 + .16 * f) + ')'; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(205,212,235,' + (.4 + .25 * f) + ')'; g.lineWidth = 3 + f * 2;
+    const a0 = e.rot * (1 + f * .3) + f * 2;
+    g.beginPath(); g.arc(cx, cy, r * .9, a0, a0 + 2.2); g.stroke();
+    g.beginPath(); g.arc(cx, cy, r * .9, a0 + Math.PI, a0 + Math.PI + 2.2); g.stroke();
+  }
+  g.fillStyle = 'rgba(16,18,28,.55)'; g.beginPath(); g.arc(e.x, e.y, R0 * .16, 0, TAU); g.fill();   // ojo del tornado
+  const nd = Q.lvl < 1 ? 10 : Q.lvl < 2 ? 6 : 0;
+  if (nd) {   // escombros que orbitan (un solo trazado)
+    g.fillStyle = 'rgba(201,206,216,.85)'; g.beginPath();
+    for (let k = 0; k < nd; k++) { const a = e.rot * (1.4 + k * .07) + k * TAU / nd, fr = (k * .37) % 1, rad = R0 * (.35 + .6 * fr); g.rect(e.x + Math.cos(a) * rad - 2, e.y - fr * R0 * .5 + Math.sin(a) * rad - 1.5, 4, 3); }
+    g.fill();
+  }
+}
+function evInd(g, x, y, col, u, t) {   // flecha en el borde de la pantalla hacia un peligro fuera de vista
+  const sx = (x - cam.x) * cam.z + W / 2, sy = (y - cam.y) * cam.z + H / 2, m = 38 * u;
+  if (sx > m && sx < W - m && sy > m && sy < H - m) return;
+  const dx = sx - W / 2, dy = sy - H / 2, k = Math.min((W / 2 - m) / (Math.abs(dx) || 1e-6), (H / 2 - m) / (Math.abs(dy) || 1e-6));
+  g.save(); g.translate(W / 2 + dx * k, H / 2 + dy * k); g.rotate(Math.atan2(dy, dx)); g.globalAlpha = .55 + .45 * Math.sin(t * 9); g.fillStyle = col;
+  g.beginPath(); g.moveTo(14 * u, 0); g.lineTo(-9 * u, -10 * u); g.lineTo(-9 * u, 10 * u); g.closePath(); g.fill(); g.restore();
+}
+function evHUD(R) {
+  const V = R.ev, p = R.player; if (!V || !p) return;
+  const g = ctx, u = clamp(Math.min(W, H) / 800, 0.65, 1.2), t = R.clock;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (V.flash > 0) { g.globalAlpha = clamp(V.flash * .55, 0, .6); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.globalAlpha = 1; }   // destello del rayo
+  if (V.banT > 0) {
+    const el = 2.4 - V.banT, pop = el < .18 ? 1 + (1 - el / .18) * .5 : 1;
+    g.globalAlpha = clamp(V.banT * 2.5, 0, 1) * clamp(el * 8, 0, 1);
+    txt(V.ban, W / 2, H * .3, 30 * u * pop, V.banC, 'center'); g.globalAlpha = 1;
+  }
+  // flecha hacia el peligro MÁS CERCANO de cada tipo (con tantos a la vez, una por tipo para no saturar)
+  let d = 1e12, bx = 0, by = 0, any = false;
+  if (V.bolt.on) { for (const z of V.bolt.Z) if (z.a && z.t >= 0 && !z.struck) { const q = (z.x - p.x) ** 2 + (z.y - p.y) ** 2; if (q < d) { d = q; bx = z.x; by = z.y; any = true; } } if (any) evInd(g, bx, by, '#ffd23f', u, t); }
+  d = 1e12; any = false;
+  if (V.tornado.on) { for (const w of V.tornado.W) if (w.a && w.t >= 0) { const q = (w.x - p.x) ** 2 + (w.y - p.y) ** 2; if (q < d) { d = q; bx = w.x; by = w.y; any = true; } } if (any) evInd(g, bx, by, '#b8c4ff', u, t); }
+}
+
 /* =====================================================================
    MULTIJUGADOR · CLIENTE (red, lobby, carrera online, resultados)
    Módulo añadido: no modifica ningún sistema existente salvo 3 ganchos mínimos (updateRace, finishRace, HUD).
@@ -4654,7 +5050,7 @@ function renderLobby() {
   $('lbCfg').innerHTML = `<div class="lb-maps">${MAPS.map(m => { const lock = !cfg.unlockAll && hostP.lvl < m.lvl; return `<div class="lb-map ${m.id === cfg.mapId ? 'sel' : ''} ${lock ? 'locked' : ''}" data-k="mapId" data-v="${m.id}"><canvas width="220" height="134"></canvas><b>${esc(m.name)}</b><small>${lock ? '🔒 NIVEL ' + m.lvl : 'NIVEL ' + m.lvl}</small></div>`; }).join('')}</div>` +
     seg('mode', 'MODO', [['duel', 'DUELO 1v1'], ['party', 'AMIGOS + BOTS']], r.mode) +
     st('laps', 'VUELTAS', cfg.laps, 1, MPC.LAPS_MAX) + seg('rev', 'SENTIDO', [[0, 'NORMAL'], [1, 'INVERTIDO']], cfg.rev ? 1 : 0) +
-    seg('cc', 'CILINDRADA', CC_LIST.map(c => [c, c + 'cc']), cfg.cc) + st('bots', 'BOTS', cfg.bots, 0, maxB) +
+    seg('cc', 'CILINDRADA', CC_LIST.map(c => [c, c + 'cc']), cfg.cc) + seg('ev', 'EVENTOS', [['off', 'SIN EVENTOS'], ['one', 'UNO A LA VEZ'], ['chaos', 'CAOS']], cfg.ev || 'chaos') + st('bots', 'BOTS', cfg.bots, 0, maxB) +
     seg('diff', 'DIFICULTAD BOTS', MPC.DIFFS.map((d, i) => [i, d.lbl]), cfg.diff) +
     seg('unlockAll', 'MODO PRUEBA', [[0, 'NO'], [1, 'SÍ · TODO DESBLOQUEADO']], cfg.unlockAll ? 1 : 0) + (cfg.unlockAll ? '<p class="lb-note">Modo prueba: cualquier coche y circuito, sin monedas ni XP.</p>' : '');
   $('lbCfg').querySelectorAll('.lb-map').forEach((el, i) => el.querySelector('canvas').getContext('2d').drawImage(lbThumb(MAPS[i], cfg.rev), 0, 0));
@@ -4671,7 +5067,7 @@ const API_MAX_PLAYERS = MPC.MAX_PLAYERS;
 $('lbCfg').addEventListener('click', e => {
   const r = NET.room, b = e.target.closest('[data-k]'); if (!r || !b || r.host !== NET.pid || b.disabled) return;
   const k = b.dataset.k; let v;
-  if (b.dataset.d) v = r.cfg[k] + (+b.dataset.d); else if (k === 'rev' || k === 'unlockAll') v = b.dataset.v === '1'; else if (k === 'mapId' || k === 'mode') v = b.dataset.v; else v = +b.dataset.v;
+  if (b.dataset.d) v = r.cfg[k] + (+b.dataset.d); else if (k === 'rev' || k === 'unlockAll') v = b.dataset.v === '1'; else if (k === 'mapId' || k === 'mode' || k === 'ev') v = b.dataset.v; else v = +b.dataset.v;
   if (k === 'mapId' && b.classList.contains('locked')) { toast('Circuito bloqueado para la sala (nivel del anfitrión)'); return; }
   netSend({ t: 'cfg', cfg: { [k]: v } });
 });
@@ -4689,6 +5085,8 @@ function netBeginRace(m) {
   const R = mpCreateRace(m.cfg, m.grid, NET.pid, 'client');
   Object.assign(R.net, { raceId: m.raceId, startAt: m.startAt, buf: {}, byCid: R.cars.slice(), stAcc: 0, snapSeq: 0, res: null, resT: 0, paused: false, cfg: m.cfg });
   const me = R.player; if (!me) return; R.launch = launchInit(R);
+  { const evm = ['off', 'one', 'chaos'].includes(m.cfg.ev) ? m.cfg.ev : 'chaos';   // eventos online: misma semilla y mismo reloj para todos
+    if (evm !== 'off') { let hs = m.cfg.seed | 0; for (const ch of String(m.raceId)) hs = (Math.imul(hs, 31) + ch.charCodeAt(0)) | 0; EV.fixed = true; R.ev = evInit(rng(hs ^ 0x5bd1e995)); R.ev.mode = evm; } }
   me.abLast = 0; for (const c of R.cars) c.abLast = 0;
   race = R; lastMap = MAPS.find(x => x.id === m.cfg.mapId); lastRev = R.rev; lastCc = R.cc; snapCam(R);
   for (const k in trackCache) if (trackCache[k] !== R.T) trackCache[k].tiles = null;
@@ -4754,7 +5152,8 @@ function netUpdateRace(R, dt) {
       if (!p.finished) { if (N.paused) { p.inp.thr = p.inp.brk = p.inp.str = 0; p.inp.nit = p.inp.ab = false; } else readPlayerInput(p); }
       else { p.ai.pace = Math.max(0.35, p.ai.pace - h * 0.15); aiInput(p, R, h); p.ai.auto = true; }
       if (R.launch && !p.finished) launchInput(p, R, h);
-      stepCar(p, p.inp, h, R); progress(p, R, h);
+      if (!(R.ev && evCarPre(p, R, h))) stepCar(p, p.inp, h, R);
+      progress(p, R, h);
       for (const o of R.cars) if (o.remote) mpCollide(p, o, R);
     }
     netInterpolate(R);
@@ -4765,7 +5164,7 @@ function netUpdateRace(R, dt) {
   }
   for (const c of R.cars) if (!(c.pos > 0)) c.pos = 1;
   R.order = R.cars.slice().sort((a, b) => a.pos - b.pos);
-  prerollFx(R, dt); spawnFx(R, dt); updateParticles(dt);
+  prerollFx(R, dt); if (R.ev) evUpdate(R, dt); spawnFx(R, dt); updateParticles(dt);
   N.stAcc += dt; if (N.stAcc >= 1 / MPC.ST_HZ) { N.stAcc = 0; netSend({ t: 'st', s: mpEncode(p) }); }
 }
 function netQuitRace() { netLeaveRoom(); race = null; $('pause').classList.remove('on'); go('mpmenu'); toast('Has abandonado la carrera'); }

@@ -294,6 +294,25 @@ h2.title::before{content:"";display:inline-block;width:12px;height:.82em;margin-
 .md-cap{position:absolute;right:clamp(20px,4vw,56px);bottom:clamp(16px,4vh,38px);display:flex;align-items:center;gap:10px;padding:8px 14px;background:#04060ccc;border:1px solid var(--line);border-radius:8px;font-size:12px;font-weight:800;letter-spacing:.12em;color:var(--text);z-index:6}
 .md-cap i{width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 10px var(--red);animation:mdRec 1.1s infinite}
 @keyframes mdRec{50%{opacity:.25}}
+#modes .md-main{width:min(940px,100%)}
+#modes .md-btns{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+#modes .md-btn{position:relative;overflow:hidden;flex-direction:column;align-items:flex-start;gap:12px;padding:26px 24px 22px;min-height:190px;animation:mdIn .5s both}
+#modes .md-btn:nth-child(2){animation-delay:.07s}#modes .md-btn:nth-child(3){animation-delay:.14s}#modes .md-btn:nth-child(4){animation-delay:.21s}
+@keyframes mdIn{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+#modes .md-btn::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:40%;background:linear-gradient(100deg,transparent,#ffffff22,transparent);transform:skewX(-20deg);transition:left .6s;pointer-events:none}
+#modes .md-btn:hover::after,#modes .md-btn.navsel::after{left:130%}
+#modes .md-btn:hover,#modes .md-btn.navsel,#modes .md-btn:focus-visible{transform:translateY(-6px)}
+#modes .md-ic{font-size:50px;animation:mdFloat 2.8s ease-in-out infinite}
+@keyframes mdFloat{50%{transform:translateY(-5px) rotate(-4deg)}}
+#modes .md-ar{position:absolute;right:18px;bottom:12px}
+.md-btn.on{border-left-color:#37e08a}.md-btn.on .md-ic{filter:drop-shadow(0 0 8px #37e08a99)}.md-btn.on .md-ar{color:#37e08a}
+.md-btn.on:hover,.md-btn.on.navsel,.md-btn.on:focus-visible{border-color:#37e08a;background:linear-gradient(100deg,#0b4a2cf2,#082a1ae6);box-shadow:0 0 34px #37e08a55}
+.md-btn.on.sv{border-left-color:#ff3b5c}.md-btn.on.sv .md-ic{filter:drop-shadow(0 0 8px #ff3b5c99)}.md-btn.on.sv .md-ar{color:#ff3b5c}
+.md-btn.on.sv:hover,.md-btn.on.sv.navsel,.md-btn.on.sv:focus-visible{border-color:#ff3b5c;background:linear-gradient(100deg,#4a0b1af2,#2a0810e6);box-shadow:0 0 34px #ff3b5c55}
+.md-tag{align-self:flex-start;font-size:10px;font-weight:900;letter-spacing:.14em;padding:3px 8px;border-radius:20px;border:1px solid currentColor;color:var(--blue)}
+.md-btn.sv .md-tag{color:var(--orange)}.md-btn.on .md-tag{color:#37e08a}.md-btn.on.sv .md-tag{color:#ff3b5c}.md-btn.soon .md-tag{color:#ffd23f}
+@media(max-width:700px){#modes .md-btns{grid-template-columns:1fr}#modes .md-btn{min-height:0;flex-direction:row;align-items:center;padding:16px}#modes .md-ic{font-size:34px}#modes .md-tag{display:none}}
+@media(prefers-reduced-motion:reduce){#modes .md-btn,#modes .md-ic{animation:none}}
 @media(max-width:700px){#modes{align-items:flex-start;padding-top:90px}.md-btn{padding:18px 16px}.md-ic{font-size:30px}.md-tx small{font-size:12px}.md-cap{display:none}}
 
 /* MENÚ PRINCIPAL */
@@ -786,7 +805,6 @@ body.inrace.touch #touch{display:block}body.inrace{touch-action:none;overscroll-
   <div class="tagline">VELOCIDAD · NITRO · GLORIA</div>
   <div class="menu-btns">
     <button class="btn pri" data-go="modes">JUGAR <small id="mnCar">VOLT</small></button>
-    <button class="btn" data-go="mpmenu">MULTIJUGADOR <small>Online con amigos</small></button>
     <button class="btn" data-go="garage">GARAJE <small>Coches y mejoras</small></button>
     <button class="btn" data-go="shop">TIENDA <small>Nuevos coches</small></button>
     <button class="btn" data-go="profile">PERFIL <small>Estadísticas</small></button>
@@ -805,10 +823,12 @@ body.inrace.touch #touch{display:block}body.inrace{touch-action:none;overscroll-
 <section class="screen" id="modes">
   <div class="md-main">
     <h2 class="title">ELIGE <b>MODO</b></h2>
-    <p class="sub">Pasa el cursor sobre un modo para ver cómo se juega.</p>
+    <p class="sub">Elige cómo quieres correr. Pasa el cursor sobre un modo para ver cómo se juega.</p>
     <div class="md-btns">
-      <button class="md-btn" data-mode="race" data-go="maps"><span class="md-ic">🏁</span><span class="md-tx"><b>MODO CARRERA</b><small>Elige circuito y cilindrada · gana monedas y XP · sube de nivel</small></span><span class="md-ar">›</span></button>
-      <button class="md-btn sv" data-mode="surv" data-go="survival"><span class="md-ic">💀</span><span class="md-tx"><b>MODO SUPERVIVENCIA</b><small>12 pilotos · 4 rondas eliminatorias · solo queda un campeón</small></span><span class="md-ar">›</span></button>
+      <button class="md-btn" data-mode="race" data-go="maps"><span class="md-ic">🏁</span><span class="md-tx"><b>CARRERA</b><small>Elige circuito y cilindrada · gana monedas y XP · sube de nivel</small></span><span class="md-tag">INDIVIDUAL</span><span class="md-ar">›</span></button>
+      <button class="md-btn sv" data-mode="surv" data-go="survival"><span class="md-ic">💀</span><span class="md-tx"><b>SUPERVIVENCIA</b><small>12 pilotos · 4 rondas eliminatorias · solo queda un campeón</small></span><span class="md-tag">INDIVIDUAL</span><span class="md-ar">›</span></button>
+      <button class="md-btn on" data-mode="net" data-go="mpmenu"><span class="md-ic">🌐</span><span class="md-tx"><b>CARRERA ONLINE</b><small>Crea una sala privada y corre con tus amigos · bots opcionales · eventos</small></span><span class="md-tag">ONLINE · AMIGOS</span><span class="md-ar">›</span></button>
+      <button class="md-btn on sv soon" data-mode="snet" data-go="mpmenu"><span class="md-ic">☠️</span><span class="md-tx"><b>SUPERVIVENCIA ONLINE</b><small>Torneo eliminatorio con amigos: 12 → 9 → 6 → 3 → 1 campeón</small></span><span class="md-tag">ONLINE · EN PREPARACIÓN</span><span class="md-ar">›</span></button>
     </div>
   </div>
   <div class="md-cap" id="mdCap"><i></i><span id="mdCapT">VISTA PREVIA · GAMEPLAY</span></div>
@@ -3759,14 +3779,14 @@ function mkDemo(map, roster) {
   clearFx(); snapCam(R); updateRace(R, 1 / 60); snapCam(R); return R;
 }
 function modeDemo(v) {
-  if (v === 'surv') return MD.surv || (MD.surv = mkDemo(SURV_MAPS[0], survRoster()));
+  if (v === 'surv' || v === 'snet') return MD.surv || (MD.surv = mkDemo(SURV_MAPS[0], survRoster()));
   return MD.race || (MD.race = mkDemo(MAPS[1] || MAPS[0]));
 }
 function setModePreview(v) {
   if (!v || MD.view === v) return;
-  MD.view = v; modeDemo(v);
+  MD.view = v; modeDemo(v); const sv = v === 'surv' || v === 'snet';
   const el = $('modes'); el.classList.remove('mdsw'); void el.offsetWidth; el.classList.add('mdsw');
-  $('mdCapT').textContent = v === 'surv' ? 'VISTA PREVIA · SUPERVIVENCIA' : 'VISTA PREVIA · CARRERA';
+  $('mdCapT').textContent = sv ? 'VISTA PREVIA · SUPERVIVENCIA' : 'VISTA PREVIA · CARRERA';
 }
 function openModes() {
   MD.view = null; MD.race = null; MD.surv = null;   // pistas y pilotos nuevos en cada visita
@@ -4332,7 +4352,9 @@ function burst(el, n, cls, base) {
 /* ---------- entrada ---------- */
 document.addEventListener('click', e => {
   Snd.init();
-  const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go);
+  const b = e.target.closest('[data-go]');
+  if (b && b.dataset.mode === 'snet') { toast('Supervivencia online: falta ampliar el servidor (rondas y eliminaciones). Todavía no disponible.'); return; }   // el servidor valida quién avanza; sin él no se puede jugar
+  if (b) go(b.dataset.go);
 });
 const backOf = m => m === 'paint' ? 'garage' : (m === 'maps' || m === 'survival') ? 'modes' : 'menu';
 $('btnBack').onclick = () => go(backOf(mode));

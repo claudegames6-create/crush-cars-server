@@ -195,16 +195,100 @@ io.on('connection', socket => {
 
   socket.on('create', m => {
     if (!peer) return;
-    const mode = (m && m.mode) ===
-setInterval(() => {
-  for (const room of rooms.values()) {
-    if (!room.race) continue;
-    const rc = room.race;
-    rc.R.clock += 0.016;
-    if (rc.R.clock > 35) {
-      endRace(room);
-    }
-  }
-}, 16);
+    const mode = (m && m.mode) === 'survival' ? 'survival' : 'party';
+    const room = {
+      code: 'CC-' + rid(2).toUpperCase(), mode, host: peer.pid, state: 'lobby', members: [peer.pid], survivalRound: 1,
+      cfg: { mapId: MAPS[0].id, cc: 150, laps: 3, bots: mode === 'survival' ? 11 : 3 }
+    };
+    rooms.set(room.code, room);
+    peer.room = room.code;
+    socket.join(room.code);
+    broadcastRoom(room);
+  });
 
-server.listen(PORT, () => console.log(`Servidor de Supervivencia activo en puerto ${PORT}`));
+  socket.on('join', m => {
+    if (!peer || !m || !m.code) return;
+    const room = rooms.get(m.code.toUpperCase());
+    if (!room || room.state !== 'lobby' || room.members.length >= maxHumans(room)) {
+      socket.emit('err', 'Sala llena o inexistente');
+      return;
+    }
+    peer.room = room.code;
+    room.members.push(peer.pid);
+    socket.join(room.code);
+    clampBots(room);
+    broadcastRoom(room);
+  });
+
+  socket.on('ready', m => {
+    if (!peer) return;
+    const room = rooms.get(peer.room);
+    if (!room) return;
+    peer.ready = !!(m && m.ready);
+    broadcastRoom(room);
+  });
+
+  socket.on('upg', m => {
+    if (!peer || !m) return;
+    if (m.name) peer.name = m.name;
+    if (m.carId) peer.carId = m.carId;
+    if (m.av !== undefined) peer.av = m.av;
+    const room = rooms.get(peer.room);
+    if (room) broadcastRoom(room);
+  });
+
+  socket.on('cfg', m => {
+    if (!peer) return;
+    const room = rooms.get(peer.room);
+    if (!room || room.host !== peer.pid) return;
+    if (m && m.cfg) {
+      if (m.cfg.mode) {
+        room.mode = m.cfg.mode;
+        if (room.mode === 'survival') room.survivalRound = 1;
+      }
+      if (m.cfg.mapId) room.cfg.mapId = m.cfg.mapId;
+      if (m.cfg.cc) room.cfg.cc = m.cfg.cc;
+      if (m.cfg.laps) room.cfg.laps = m.cfg.laps;
+    }
+    clampBots(room);
+    broadcastRoom(room);
+  });
+
+  socket.on('start', () => {
+    if (!peer) return;
+    const room = rooms.get(peer.room);
+    if (!room || room.host !== peer.pid || room.state !== 'lobby') return;
+    startRace(room);
+  });
+
+  socket.on('c', m => {
+    if (!peer || !peer.room) return;
+    socket.to(peer.room).emit('c', peer.pid, m);
+  });
+
+  socket.on('disconnect', () => {
+Utilitza el codi amb precaució.
+if (!peer) return;
+const room = rooms.get(peer.room);
+if (room) {
+room.members = room.members.filter(id => id !== peer.pid);
+if (room.host === peer.pid && room.members.length > 0) {
+room.host = room.members[0];
+}
+if (!room.members.length) rooms.delete(room.code);
+else broadcastRoom(room);
+}
+peers.delete(peer.pid);
+});
+});
+setInterval(() => {
+for (const room of rooms.values()) {
+if (!room.race) continue;
+const rc = room.race;
+rc.R.clock += 0.016;
+if (rc.R.clock > 35) {
+endRace(room);
+}
+}
+}, 16);
+server.listen(PORT, () => console.log(Servidor de Supervivencia activo en puerto ${PORT}));

@@ -45,7 +45,7 @@ function loadGame() {
   vm.runInContext(`
     if (typeof CARS === 'undefined') {
       CARS = [{id:'volt', name:'VOLT'}, {id:'bulwark', name:'BULWARK'}, {id:'mirage', name:'MIRAGE'}];
-      MAPS = [{id:'desert_dash', name:'Desierto', lvl:1, laps:3, pool:[0,1,2]}, {id:'neon_city', name:'Neon', lvl:1, laps:3, pool:[0,1,2]}];
+      MAPS = [{id:'desert_dash', name:'Desierto', lvl:1, laps:3, pool:[]}, {id:'neon_city', name:'Neon', lvl:1, laps:3, pool:[]}];
       CC_LIST =;
       AVATARS = Array(16).fill(0);
       RIVALS = [{name:'Apex', col:'#fff'}, {name:'Shadow', col:'#000'}];
@@ -155,7 +155,7 @@ function endRace(room) {
     room.members = room.members.filter(pid => !eliminatedPids.includes(pid));
 
     if (room.members.length <= 1 && room.survivalRound >= 4) {
-      if(room.members.length > 0) io.to(room.code).emit('survival_champion', { winner: room.members[0] });
+      if(room.members.length > 0) io.to(room.code).emit('survival_champion', { winner: room.members });
       room.state = 'lobby';
       room.survivalRound = 1;
     } else {
